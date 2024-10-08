@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bionic Arm Current Monitor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Chart.js Library -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"> <!-- Font Awesome -->
+  <link href="https://fonts.googleapis.com/css2?family=Helvetica+Neue:wght@300;400;500;600;700&display=swap" rel="stylesheet"> <!-- Google Fonts -->
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f8f9fa; /* Light background for a clean look */
+      color: #333;
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+    }
+    h1 {
+      color: #2c3e50;
+      margin-bottom: 30px;
+      font-size: 2.5em;
+      font-weight: 600;
+    }
+    .button-container {
+      display: flex;
+      justify-content: center;
+      gap: 20px; /* Space between buttons */
+      margin-bottom: 20px;
+    }
+    .button {
+      display: flex;
+      align-items: center;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #007aff, #0051a8); /* Deeper blue gradient */
+      color: white;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: bold;
+      box-shadow: 0px 4px 15px rgba(0, 81, 168, 0.4); /* Increased shadow */
+      transition: all 0.3s ease;
+    }
+    .button:hover {
+      background: linear-gradient(135deg, #0051a8, #007aff); /* Inverted gradient on hover */
+      box-shadow: 0px 6px 20px rgba(0, 81, 168, 0.5);
+      transform: translateY(-2px);
+    }
+    .button i {
+      margin-right: 8px; /* Space between icon and text */
+    }
+    #currentData {
+      margin: 20px auto;
+      padding: 20px;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      width: 60%;
+      background-color: #ffffff;
+      font-size: 24px;
+      color: #27ae60;
+      box-shadow: 0px 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    label {
+      margin-top: 20px;
+      display: block; /* Makes it a block element */
+      text-align: center; /* Center align the text */
+      width: 100%; /* Take full width to center with input */
+      color: #333;
+      font-size: 18px; /* Slightly larger font */
+    }
+    input {
+      padding: 12px;
+      width: 40%; /* Adjusted width to be narrower */
+      border: 2px solid #007aff;
+      border-radius: 10px;
+      font-size: 18px;
+      background-color: #f9f9f9;
+      color: #333;
+      margin: 10px auto; /* Centered input */
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    input:focus {
+      border-color: #0051a8;
+      box-shadow: 0px 4px 12px rgba(0, 81, 168, 0.3);
+      outline: none; /* Remove default outline */
+    }
+    #alertBox {
+      color: #e74c3c;
+      font-weight: bold;
+      margin-top: 20px;
+      font-size: 18px;
+    }
+    #chartContainer {
+      max-width: 90%; /* Make the chart responsive */
+      margin: 0 auto; /* Center the chart */
+      height: 300px; /* Fixed height for smaller screens */
+    }
+    canvas {
+      width: 100% !important; /* Ensure the chart fills the container */
+      height: 100% !important; /* Ensure the chart fills the container */
+    }
+    footer {
+      margin-top: 30px;
+      color: #555;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Bionic Arm Current Monitor</h1>
+
+  <div class="button-container">
+    <button id="connectBtn" class="button">
+      <i class="fas fa-bluetooth"></i> Connect to Bluetooth
+    </button>
+    <button id="setThresholdBtn" class="button">
+      <i class="fas fa-bolt"></i> Set Threshold
+    </button>
+  </div>
+
+  <div id="currentData">Current Data will appear here...</div>
+
+  <label for="threshold">Set Overcurrent Threshold (mA):</label>
+  <input type="number" id="threshold" value="2000">
+
+  <p id="alertBox"></p>
+
+  <!-- Chart Container -->
+  <div id="chartContainer">
+    <canvas id="currentChart"></canvas>
+  </div>
+
+  <footer>
+    &copy; 2024 Bionic Arm Project. All rights reserved.
+  </footer>
+
+  <script>
+    let bluetoothDevice;
+    let bluetoothCharacteristic;
+    let currentThreshold = 2000;  // Default threshold in mA
+    let currentDataArray = [];    // Array to store current values for the chart
+    let timeArray = [];           // Array to store time labels for the chart
+
+    // Set up the Chart.js chart
+    const ctx = document.getElementById('currentChart').getContext('2d');
+    const currentChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: timeArray,
+        datasets: [{
+          label: 'Current (mA)',
+          data: currentDataArray,
+          borderColor: '#007aff',
+          borderWidth: 3,
+          fill: false,
+          tension: 0.4,
+          pointBackgroundColor: '#27ae60',
+          pointRadius: 4
+        }]
+      },
+      options: {
+        responsive: true, // Make chart responsive
+        maintainAspectRatio: false, // Allow the chart to change aspect ratio
+        scales: {
+          x: { 
+            title: { 
+              display: true, 
+              text: 'Time (s)',
+              color: '#333',
+              font: { size: 16, weight: 'bold' }
+            },
+            ticks: {
+              color: '#333',
+              font: { size: 14 } // Adjusted font size for better clarity
+            }
+          },
+          y: { 
+            title: { 
+              display: true, 
+              text: 'Current (mA)',
+              color: '#333',
+              font: { size: 16, weight: 'bold' }
+            },
+            ticks: {
+              color: '#333',
+              font: { size: 14 } // Adjusted font size for better clarity
+            }
+          }
+        },
+        animation: {
+          duration: 500,  // Smooth transition animation for the chart
+          easing: 'easeOutExpo'
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#333',
+              font: { size: 14 }
+            }
+          }
+        }
+      }
+    });
+
+    // Connect to Bluetooth when button is clicked
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+      try {
+        // Request a Bluetooth device with Serial service
+        bluetoothDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ services: ['00001101-0000-1000-8000-00805f9b34fb'] }] // UUID for serial devices like HC-05
+        });
+
+        // Connect to the GATT server
+        const server = await bluetoothDevice.gatt.connect();
+        const service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
+        bluetoothCharacteristic = await service.getCharacteristic('00001101-0000-1000-8000-00805f9b34fb');
+
+        // Start receiving data
+        await bluetoothCharacteristic.startNotifications();
+        bluetoothCharacteristic.addEventListener('characteristicvaluechanged', handleData);
+
+        document.getElementById('alertBox').innerHTML = "Connected to Bluetooth!";
+        document.getElementById('alertBox').style.color = '#27ae60';  // Green alert for successful connection
+      } catch (error) {
+        console.log(error);
+      }
+    });
+
+    // Handle incoming data from Bluetooth
+    function handleData(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      const currentData = parseFloat(value.split(' ')[1]);  // Extract numeric value
+      document.getElementById('currentData').innerHTML = `Current: ${currentData} mA`;
+
+      // Add data to chart
+      const currentTime = new Date().toLocaleTimeString();
+      timeArray.push(currentTime);
+      currentDataArray.push(currentData);
+
+      // Limit chart to 20 data points
+      if (timeArray.length > 20) {
+        timeArray.shift(); // Remove the oldest time entry
+        currentDataArray.shift(); // Remove the oldest current value
+      }
+
+      // Update the chart with smooth animation
+      currentChart.update();
+
+      // Check if overcurrent
+      if (currentData > currentThreshold) {
+        document.getElementById('alertBox').innerHTML = `Overcurrent detected! Current: ${currentData} mA`;
+        document.getElementById('alertBox').style.color = '#e74c3c';  // Red alert for overcurrent
+      } else {
+        document.getElementById('alertBox').innerHTML = "";  // Clear alert if normal
+      }
+    }
+
+    // Set new overcurrent threshold
+    document.getElementById('setThresholdBtn').addEventListener('click', () => {
+      currentThreshold = parseFloat(document.getElementById('threshold').value);
+      alert('New threshold set: ' + currentThreshold + ' mA');
+    });
+  </script>
+
+</body>
+</html>
